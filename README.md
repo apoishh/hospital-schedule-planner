@@ -2,7 +2,7 @@
 
 **A tool that makes the weekly Surgical House Officer (HO) timetable: ETD/EMOT, MSW, FSW and subspecialties. It adds the week as a new tab in the existing Excel timetable and can publish a read-only web page so every HO can see it.**
 
-**Live demo of the viewer page** (made-up names): https://apoishh.github.io/hospital-schedule-planner/ · **Download the app:** [latest release](https://github.com/apoishh/hospital-schedule-planner/releases/latest)
+**Live demo of the viewer page** (names swapped for DC &amp; Marvel characters): https://apoishh.github.io/hospital-schedule-planner/ · **Download the app:** [latest release](https://github.com/apoishh/hospital-schedule-planner/releases/latest)
 
 ## Objective
 
@@ -78,7 +78,7 @@ It's easy to miss one, and hard to be fair over months. The app checks every rul
 | The app, for the roster maker | `release/HO Roster.zip`. Unzip anywhere and run `HO Roster.exe` |
 | Weekly how-to | [release-files/How to use HO Roster.txt](release-files/How%20to%20use%20HO%20Roster.txt) (also inside the zip) |
 | Rules checklist | [RULES CHECKLIST.md](RULES%20CHECKLIST.md) (also inside the zip) |
-| Live demo page | [docs/index.html](docs/index.html), served by GitHub Pages. It's built with `tools/make_demo.py`, which swaps every real name for a made-up one and refuses to write the page if any real name is left |
+| Live demo page | [docs/index.html](docs/index.html), served by GitHub Pages. It's built with `tools/make_demo.py`, which swaps every real name for a DC or Marvel character and refuses to write the page if any real name is left |
 | Input example | [examples/Roster Data EXAMPLE.xlsx](examples/Roster%20Data%20EXAMPLE.xlsx): every tab filled in with made-up names, one row per request type, each row explained. Also in the zip. Rebuild with `tools/make_example.py` |
 | Roster Data.xlsx | Next to the timetable. The app's **Open Roster Data** button opens it |
 | Backups | `Roster backups\`, next to the timetable |
