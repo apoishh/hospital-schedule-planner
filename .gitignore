@@ -1,0 +1,23 @@
+# ---- Personal data: never upload ----
+# Real timetables and Roster Data contain doctors' names and leave reasons.
+*.xlsx
+!examples/*.xlsx
+preview/
+notes/
+PRIVATE real data/
+*.zip
+Roster backups/
+HO Roster viewer/
+
+# ---- Build output (the app zip goes on the GitHub Release instead) ----
+release/
+build/
+dist/
+*.spec
+
+# ---- Python / editor ----
+__pycache__/
+*.pyc
+.venv/
+.claude/settings.local.json
+~$*

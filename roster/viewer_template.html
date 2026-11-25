@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Surgical HO Roster</title>
+<style>
+:root {
+  --bg: #f4f6f9; --surface: #ffffff; --surface-2: #f0f3f7; --text: #15181e; --muted: #5d6573;
+  --border: #dfe3ea; --accent: #1f4e78; --accent-text: #ffffff; --accent-soft: #e3ecf6;
+  --hl: #fff1b8; --today: #eaf2fb; --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1116; --surface: #171b22; --surface-2: #1e232c; --text: #e7eaf0; --muted: #9aa3b2;
+    --border: #2b313c; --accent: #7fb0e0; --accent-text: #0e1116; --accent-soft: #1c2a3b;
+    --hl: #4a3f12; --today: #18263a; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1116; --surface: #171b22; --surface-2: #1e232c; --text: #e7eaf0; --muted: #9aa3b2;
+  --border: #2b313c; --accent: #7fb0e0; --accent-text: #0e1116; --accent-soft: #1c2a3b;
+  --hl: #4a3f12; --today: #18263a; --shadow: none;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px 48px; }
+header.top { padding: 20px 0 8px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+.updated { color: var(--muted); font-size: 13px; }
+.controls {
+  position: sticky; top: 0; z-index: 5; background: var(--bg);
+  padding: 10px 0; display: grid; gap: 10px;
+  grid-template-columns: auto 1fr auto; align-items: center;
+}
+@media (max-width: 720px) {
+  .controls { grid-template-columns: 1fr; position: static; }
+  .seg { display: flex; }
+  .seg button { flex: 1; }
+  .weeknav .label { font-size: 14px; }
+}
+.weeknav { display: flex; align-items: center; gap: 6px; }
+.weeknav .label { font-weight: 650; min-width: 0; white-space: nowrap; }
+.badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+button, input { font: inherit; color: inherit; }
+.iconbtn {
+  width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); cursor: pointer; font-size: 18px; line-height: 1; flex: none;
+}
+.iconbtn:disabled { opacity: .35; cursor: default; }
+.search {
+  width: 100%; height: 38px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); outline: none;
+}
+.search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 8px 14px; cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+.me { padding: 14px; margin: 6px 0 14px; }
+.me h2 { font-size: 15px; margin: 0 0 10px; }
+.me .sub { color: var(--muted); font-weight: 500; font-size: 13px; }
+.meweek { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.meday { text-align: center; padding: 8px 2px; border-radius: 10px; background: var(--surface-2); min-width: 0; }
+.meday.is-today { outline: 2px solid var(--accent); }
+.meday .d { font-size: 12px; color: var(--muted); }
+.meday .chip { margin-top: 6px; }
+@media (max-width: 520px) { .meweek { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.chip {
+  display: inline-block; max-width: 100%; padding: 2px 7px; border-radius: 6px; font-size: 12px; font-weight: 650;
+  background: var(--c-bg, var(--surface-2)); color: var(--c-fg, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border: 1px solid var(--c-bd, transparent);
+}
+.days { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+.days::-webkit-scrollbar { display: none; }
+.days button {
+  flex: none; border: 1px solid var(--border); background: var(--surface); border-radius: 10px;
+  padding: 6px 12px; cursor: pointer; text-align: center; min-width: 58px;
+}
+.days button .n { display: block; font-size: 12px; color: var(--muted); }
+.days button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.days button[aria-pressed="true"] .n { color: inherit; opacity: .85; }
+.groups { display: grid; gap: 12px; }
+.group { padding: 4px 0; }
+.group h3 { margin: 0; padding: 12px 14px 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--border); align-items: start; }
+.row:first-of-type { border-top: 0; }
+.row .names { min-width: 0; overflow-wrap: anywhere; }
+.row .names span { display: inline; }
+.row .names span + span::before { content: " · "; color: var(--muted); }
+@media (max-width: 520px) { .row { grid-template-columns: 1fr; gap: 4px; } }
+mark { background: var(--hl); color: inherit; border-radius: 3px; padding: 0 2px; }
+.section { margin-bottom: 18px; overflow: hidden; }
+.section h2 { font-size: 15px; margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 760px; font-size: 13px; }
+th, td { padding: 6px 6px; border-bottom: 1px solid var(--border); text-align: center; }
+thead th { position: sticky; top: 0; background: var(--surface); font-weight: 600; color: var(--muted); font-size: 12px; }
+thead th.is-today { color: var(--accent); }
+th.name, td.name {
+  position: sticky; left: 0; z-index: 1; text-align: left; background: var(--surface);
+  width: 230px; max-width: 230px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 550;
+}
+@media (max-width: 720px) {
+  table { min-width: 560px; font-size: 12px; }
+  th.name, td.name { width: 118px; max-width: 118px; font-size: 11.5px; }
+  td.cell .chip { font-size: 10.5px; padding: 2px 3px; }
+}
+td.name .unit { color: var(--muted); font-weight: 500; font-size: 11px; margin-right: 4px; }
+td.cell { padding: 3px; }
+td.cell .chip { width: 100%; }
+td.is-today { background: var(--today); }
+tr.hit td.name { background: var(--hl); }
+tr.dim { display: none; }
+.empty { padding: 28px; text-align: center; color: var(--muted); }
+footer { color: var(--muted); font-size: 12px; margin-top: 24px; line-height: 1.6; }
+.themebtn { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 4px 10px; cursor: pointer; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Surgical HO Roster</h1>
+    <span class="updated" id="updated"></span>
+  </header>
+
+  <div class="controls">
+    <div class="weeknav">
+      <button class="iconbtn" id="prev" aria-label="Previous week">&#8249;</button>
+      <span class="label" id="weeklabel"></span>
+      <span class="badge" id="weekbadge" hidden></span>
+      <button class="iconbtn" id="next" aria-label="Next week">&#8250;</button>
+    </div>
+    <input class="search" id="q" type="search" placeholder="Find your name…" autocomplete="off" aria-label="Find a doctor">
+    <div class="seg" role="group" aria-label="View">
+      <button id="v-day" aria-pressed="true">By day</button>
+      <button id="v-table" aria-pressed="false">Full table</button>
+    </div>
+  </div>
+
+  <div id="me"></div>
+  <main id="view"></main>
+
+  <footer>
+    <div>The Excel timetable is the official copy. If anything here differs, the Excel copy is correct.</div>
+    <div><button class="themebtn" id="theme">Theme: auto</button></div>
+  </footer>
+</div>
+
+<script type="application/json" id="data">/*__DATA__*/</script>
+<script>
+(function () {
+  "use strict";
+  var DATA = JSON.parse(document.getElementById("data").textContent);
+  var DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var NIGHT = new Set(DATA.night_codes);
+  var DAYSHIFT = ["ETD AM", "EMOT AM", "EMOT AM TAG", "MSW LD", "MSW SD", "FSW LD", "FSW SD"];
+  var SPECIAL = ["SCOPE/CLINIC", "SCOPE", "CLINIC", "MINOR OT", "HPB"];
+  var LEAVE = new Set(["AL", "MC", "EL", "PH", "LEAVE"]);
+
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function norm(s) { return String(s || "").replace(/\s+/g, " ").trim().toUpperCase(); }
+  function nameKey(s) { return norm(s).replace(/^DR\.?\s+/, ""); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function parseDate(s) { var p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+  function fmt(d) { return d.getDate() + " " + MONTHS[d.getMonth()]; }
+
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var weeks = DATA.weeks.slice().sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+  var wi = weeks.length - 1;
+  weeks.forEach(function (w, i) { var s = parseDate(w.start); if (today >= s && today < addDays(s, 7)) wi = i; });
+  if (!weeks.some(function (w) { var s = parseDate(w.start); return today >= s && today < addDays(s, 7); })) {
+    weeks.forEach(function (w, i) { if (parseDate(w.start) <= today) wi = i; });
+  }
+  var view = store("ho.view") || "day";
+  var query = store("ho.q") || "";
+  var dayIdx = null;
+
+  function chip(code) {
+    var k = norm(code), st = DATA.styles[k];
+    if (!code) return '<span class="chip" style="--c-bg:transparent">&nbsp;</span>';
+    var style = st ? "--c-bg:" + (st.bg || "transparent") + ";--c-fg:" + (st.bg ? st.fg : (st.fg || "inherit")) + (st.bg ? "" : ";--c-bd:var(--border)") : "--c-bd:var(--border)";
+    return '<span class="chip" style="' + style + '" title="' + esc(code) + '">' + esc(code) + "</span>";
+  }
+  function matches(name) {
+    var q = nameKey(query);
+    return q.length >= 2 && nameKey(name).indexOf(q) !== -1;
+  }
+  function highlight(name) {
+    var q = nameKey(query);
+    if (q.length < 2) return esc(name);
+    var i = norm(name).indexOf(q);
+    if (i < 0) return esc(name);
+    return esc(name.slice(0, i)) + "<mark>" + esc(name.slice(i, i + q.length)) + "</mark>" + esc(name.slice(i + q.length));
+  }
+  function rank(code) {
+    var k = norm(code);
+    if (NIGHT.has(k)) return [0, DATA.night_codes.indexOf(k)];
+    if (DAYSHIFT.indexOf(k) >= 0) return [1, DAYSHIFT.indexOf(k)];
+    if (SPECIAL.indexOf(k) >= 0) return [2, SPECIAL.indexOf(k)];
+    if (k === "PN") return [4, 0];
+    if (k.indexOf("OFF") === 0) return [4, 1];
+    if (LEAVE.has(k)) return [5, 0];
+    return [3, 0];
+  }
+  var GROUPS = ["On call tonight", "Day shifts", "Clinic, OT & HPB", "Subspecialty & other", "Post-night & off", "Leave"];
+
+  function render() {
+    var w = weeks[wi], start = parseDate(w.start), end = addDays(start, 6);
+    document.getElementById("weeklabel").textContent = fmt(start) + " – " + fmt(end) + " " + end.getFullYear();
+    var badge = document.getElementById("weekbadge");
+    var diff = Math.round((start - addDays(today, -((today.getDay() + 6) % 7))) / 864e5 / 7);
+    badge.hidden = !(diff >= -1 && diff <= 1);
+    badge.textContent = diff === 0 ? "This week" : diff === 1 ? "Next week" : "Last week";
+    document.getElementById("prev").disabled = wi === 0;
+    document.getElementById("next").disabled = wi === weeks.length - 1;
+    document.getElementById("v-day").setAttribute("aria-pressed", view === "day");
+    document.getElementById("v-table").setAttribute("aria-pressed", view === "table");
+    var todayIdx = -1;
+    for (var i = 0; i < 7; i++) if (sameDay(addDays(start, i), today)) todayIdx = i;
+    if (dayIdx === null) dayIdx = todayIdx >= 0 ? todayIdx : 0;
+
+    // "My week" cards for matching names
+    var rows = [];
+    w.sections.forEach(function (s) { s.rows.forEach(function (r) { rows.push(r); }); });
+    var hits = rows.filter(function (r) { return matches(r.name); });
+    var me = "";
+    if (hits.length && hits.length <= 3) {
+      hits.forEach(function (r) {
+        me += '<section class="card me"><h2>' + highlight(r.name) + ' <span class="sub">' + esc(r.unit) + "</span></h2><div class=\"meweek\">";
+        for (var d = 0; d < 7; d++) {
+          var dt = addDays(start, d);
+          me += '<div class="meday' + (d === todayIdx ? " is-today" : "") + '"><div class="d">' + DAYS[d] + " " + dt.getDate() + "</div>" + chip(r.codes[d]) + "</div>";
+        }
+        me += "</div></section>";
+      });
+    } else if (nameKey(query).length >= 2 && !hits.length) {
+      me = '<div class="card empty">No one called “' + esc(query) + '” this week.</div>';
+    }
+    document.getElementById("me").innerHTML = me;
+
+    var html = "";
+    if (view === "day") {
+      html += '<div class="days" role="group" aria-label="Day">';
+      for (var d2 = 0; d2 < 7; d2++) {
+        var dt2 = addDays(start, d2);
+        html += '<button data-day="' + d2 + '" aria-pressed="' + (d2 === dayIdx) + '">' + DAYS[d2] + (d2 === todayIdx ? " •" : "") + '<span class="n">' + fmt(dt2) + "</span></button>";
+      }
+      html += "</div>";
+      var byCode = {};
+      rows.forEach(function (r) {
+        var c = r.codes[dayIdx];
+        if (!c) return;
+        var key = norm(c).indexOf("OFF") === 0 ? "OFF" : c;
+        (byCode[key] = byCode[key] || []).push(r.name);
+      });
+      var codes = Object.keys(byCode).sort(function (a, b) {
+        var ra = rank(a), rb = rank(b);
+        return ra[0] - rb[0] || ra[1] - rb[1] || a.localeCompare(b);
+      });
+      var groups = GROUPS.map(function () { return []; });
+      codes.forEach(function (c) { groups[rank(c)[0]].push(c); });
+      html += '<div class="groups">';
+      groups.forEach(function (list, gi) {
+        if (!list.length) return;
+        html += '<section class="card group"><h3>' + GROUPS[gi] + "</h3>";
+        list.forEach(function (c) {
+          html += '<div class="row"><div>' + chip(c) + '</div><div class="names">' +
+            byCode[c].map(function (n) { return "<span>" + highlight(n) + "</span>"; }).join("") + "</div></div>";
+        });
+        html += "</section>";
+      });
+      html += "</div>";
+    } else {
+      w.sections.forEach(function (s) {
+        html += '<section class="card section"><h2>' + esc(s.label) + '</h2><div class="tablewrap"><table><thead><tr><th class="name">Name</th>';
+        for (var d3 = 0; d3 < 7; d3++) {
+          html += '<th class="' + (d3 === todayIdx ? "is-today" : "") + '">' + DAYS[d3] + "<br>" + addDays(start, d3).getDate() + "</th>";
+        }
+        html += "</tr></thead><tbody>";
+        var q = nameKey(query).length >= 2;
+        s.rows.forEach(function (r) {
+          var hit = matches(r.name);
+          html += '<tr class="' + (hit ? "hit" : (q ? "dim" : "")) + '"><td class="name" title="' + esc(r.name) + '">' +
+            (s.pool ? "" : '<span class="unit">' + esc(r.unit) + "</span>") + highlight(r.name) + "</td>";
+          for (var d4 = 0; d4 < 7; d4++) html += '<td class="cell' + (d4 === todayIdx ? " is-today" : "") + '">' + chip(r.codes[d4]) + "</td>";
+          html += "</tr>";
+        });
+        html += "</tbody></table></div></section>";
+      });
+      if (nameKey(query).length >= 2 && !hits.length) html = "";
+    }
+    document.getElementById("view").innerHTML = html;
+  }
+
+  document.getElementById("updated").textContent = "Updated " + DATA.updated;
+  document.getElementById("prev").onclick = function () { if (wi > 0) { wi--; dayIdx = null; render(); } };
+  document.getElementById("next").onclick = function () { if (wi < weeks.length - 1) { wi++; dayIdx = null; render(); } };
+  document.getElementById("v-day").onclick = function () { view = "day"; store("ho.view", view); render(); };
+  document.getElementById("v-table").onclick = function () { view = "table"; store("ho.view", view); render(); };
+  var qi = document.getElementById("q");
+  qi.value = query;
+  qi.oninput = function () { query = qi.value; store("ho.q", query); render(); };
+  document.getElementById("view").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-day]");
+    if (b) { dayIdx = +b.getAttribute("data-day"); render(); }
+  });
+  var themes = ["auto", "light", "dark"], ti = Math.max(0, themes.indexOf(store("ho.theme") || "auto"));
+  function applyTheme() {
+    var t = themes[ti];
+    if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t);
+    document.getElementById("theme").textContent = "Theme: " + t;
+  }
+  document.getElementById("theme").onclick = function () { ti = (ti + 1) % 3; store("ho.theme", themes[ti]); applyTheme(); };
+  applyTheme();
+  if (!weeks.length) { document.getElementById("view").innerHTML = '<div class="card empty">No weeks published yet.</div>'; return; }
+  render();
+})();
+</script>
+</body>
+</html>

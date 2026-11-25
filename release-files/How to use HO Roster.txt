@@ -1,0 +1,134 @@
+HO ROSTER - HOW TO USE
+======================
+
+WHAT IT DOES
+  You type this week's leave and requests into one Excel file, press one
+  button, and the app adds next week's schedule as a new tab at the front
+  of your timetable - same layout and colours as always.
+
+
+1. WHERE EVERYTHING IS  (keep it all in ONE folder)
+---------------------------------------------------
+  My Roster folder\
+    HO Roster\HO Roster.exe        <- the app. Double-click to start.
+    HO Roster\How to use ...txt    <- this guide
+    HO Roster\RULES CHECKLIST.md   <- every rule the app follows (open with Notepad)
+    HO Roster\Roster Data EXAMPLE.xlsx <- a filled-in example (made-up names):
+                                      copy how the rows are written
+    Surgical HO Timetable.xlsx     <- YOUR timetable (the official copy)
+    Roster Data.xlsx               <- made by the app next to the timetable. YOU EDIT THIS.
+    Roster backups\                <- made by the app. A copy before every change.
+    HO Roster viewer\              <- made by the app. The web page for everyone.
+
+  You never need to search for these: the app has buttons
+  "Open Roster Data", "Open Timetable" and "Open folder".
+
+
+2. FIRST TIME (5 minutes)
+-------------------------
+  a) Put your timetable .xlsx in the folder above. Unzip "HO Roster" there too.
+  b) Double-click HO Roster.exe. If Windows says "Windows protected your PC":
+     click "More info" -> "Run anyway".
+  c) Timetable: Browse... -> pick your timetable.
+     Roster Data: leave as it is (the app fills it in).
+  d) Click "Open Roster Data". It is created from the newest week.
+     Check the DOCTORS tab (see 4).
+
+
+3. EVERY WEEK (6 steps)
+-----------------------
+  1. "Open Roster Data" -> REQUESTS tab -> one row per request (examples in 5).
+  2. Anyone joining / leaving / changing pool? -> DOCTORS tab (examples in 4).
+  3. SAVE and CLOSE Roster Data and the timetable in Excel.
+  4. Click "Make next week". Wait about a minute.
+  5. Read the messages:
+       green "all ... met"     -> good
+       red   ! SHORT           -> not enough HOs that day (red cell in the sheet)
+       red   ! REQUEST NOT MET -> a MUST request was impossible (it says why)
+       red   ! NOT PAIRED      -> a junior on night without a senior
+       grey  - ...             -> small things (below ideal, borrowed, prefer not met)
+       Pool rotation           -> who has been 4+ weeks in a pool and where they could go
+  6. "Open Timetable" -> new week is the FIRST tab. Change anything by hand,
+     save, then "Check newest week". When happy: "Publish online".
+
+
+4. DOCTORS TAB - EXAMPLES
+-------------------------
+  New HO joining MSW on 30/11      Name: FARAH NADIA BINTI OMAR Pool: MSW
+                                   Start date: 30/11/2026
+  HO leaving (end of posting)      Last day (EOP): 16/12/2026
+  HO leaving right now             Active: NO
+  Moving to MSW                    Pool: MSW
+  Going to HPB subspecialty        Pool: HPB
+  Cannot do nights                 Nights allowed: NO
+  Exactly 3 nights a week          Min nights: 3   Max nights: 3
+  1st posting HO                   Junior (1st posting): YES
+                                   -> always has a senior on the same night
+  Has not done EMOT AM yet         EMOT AM trained: NO
+                                   -> gets "EMOT AM TAG" next to an EMOT AM
+                                   (change to YES once they are signed off)
+  Leave blank = use the default from the RULES tab.
+
+
+5. REQUESTS TAB - EXAMPLES  (same made-up names as Roster Data EXAMPLE.xlsx)
+--------------------------
+  Name can be any part of the name that only one HO has (e.g. AISYAH).
+  "To" blank = one day.   PN after a night is automatic - don't write PN.
+
+  Name         From        To          Type         Show as        Must/Prefer
+  AISYAH       02/12/2026  06/12/2026  AL
+  DANIEL       25/12/2026              PH
+  PRIYA        05/12/2026              COURSE       Stroke course
+  NADIA HUDA   30/11/2026              WANT NIGHT                  MUST
+  MICHAEL      05/12/2026              OFF                         MUST
+  SITI AMINAH  04/12/2026  06/12/2026  NO NIGHT                    PREFER
+  JASON        01/12/2026              DAY SHIFT                   (must work AM/SD)
+  MICHAEL      03/12/2026              FIXED SHIFT  MINOR OT
+  FARAH        30/11/2026  13/12/2026  ONLY SHIFT   MSW LD         (new HO: LD only)
+  NADIA HUDA   07/12/2026  13/12/2026  OFF COUNT    0              (no off that week)
+
+  MUST   = always done unless impossible (then shown in red with the reason).
+  PREFER = done if it fits.
+  Old rows can stay - only dates in the week being made are used.
+
+
+6. PAIRS TAB - EXAMPLES  (optional)
+-----------------------------------
+  Juniors ALWAYS get a senior on night automatically. Use PAIRS only for
+  extra, named pairings:
+
+  Person   Together with        On these shifts     Must/Prefer
+  DANIEL   AISYAH, MICHAEL      ETD ON, EMOT PM     MUST
+  NADIA    JASON                MSW ON              PREFER
+  PRIYA    (blank = any senior) EMOT AM TAG         MUST
+
+
+7. VIEWER WEBSITE (read-only page for all HOs)
+----------------------------------------------
+  "Preview viewer"     -> opens the page on this computer (no account needed)
+  "Publish online"     -> uploads it; the link stays the same every week
+  "Website settings"   -> one-time setup (free Netlify account + token, 3 steps
+                          shown in the window)
+  HOs open the link on their phone: pick a day to see who is on call, or type
+  their name to see their own week. MC/EL show as LEAVE.
+
+
+8. CHANGING THE RULES (no code)
+-------------------------------
+  Roster Data -> STAFFING : how many HOs each shift needs per day
+                            (Min = must, Target = ideal, Max = upper limit)
+  Roster Data -> RULES    : nights per week, off days, borrowing, juniors,
+                            EMOT AM TAG, HPB off days, pool rotation, viewer...
+                            Change the Value column only.
+  Full list of rules: RULES CHECKLIST.md
+
+
+9. IF SOMETHING GOES WRONG
+--------------------------
+  "is open in Excel"          close that file in Excel and try again
+  "is the Roster Data file"   the Timetable box points at Roster Data - Browse...
+                              and pick the timetable instead
+  Bad result                  delete the new tab, or restore the copy in
+                              "Roster backups"
+  Same week again             type its Monday in "Week starting" and click
+                              "Make next week" - it asks before replacing
