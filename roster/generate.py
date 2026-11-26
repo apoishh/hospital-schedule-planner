@@ -1,7 +1,9 @@
 """Make next week's sheet: python -m roster.generate TIMETABLE.xlsx ROSTERDATA.xlsx [--week dd/mm/yyyy]"""
 import argparse
 import os
+import re
 import shutil
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 import openpyxl
@@ -9,7 +11,8 @@ import openpyxl
 from . import data as rdata
 from . import rotation
 from .common import (DAY_NAMES, LEAVE_CODES, POOLS, SECTION_TO_POOL, SPECIAL_CODES,
-                     name_key, norm_code, parse_days, sheet_title, to_date, yes)
+                     name_key, norm_code, parse_days, sheet_title, to_date, with_tags, yes)
+from .data import StaffRule
 from .solver import PairRule, Person, solve
 from .timetable import COUNTER_COLS, OutRow, OutSection, build_style_map, load_weeks, write_week
 
@@ -74,6 +77,39 @@ def _counters(base, sec, row, labels):
     return [v if v is not None else 0 for v in vals]
 
 
+def _worked(code):
+    return bool(code) and not code.startswith("OFF") and code not in LEAVE_CODES
+
+
+def _last_tag(row):
+    """Highest TAG number in last week's row (e.g. 'MSW TAG 6' -> 6), or None."""
+    nums = [int(m.group(1)) for c in (row.codes if row else []) for m in [re.search(r"TAG (\d+)$", c)] if m]
+    return max(nums) if nums else None
+
+
+def _ph_check(wb, asked, rd, week_days, log):
+    """Warn when an HO takes more PH than claimable public holidays they worked (incl. PN)."""
+    ph_dates = [to_date(x) for x in str(rd.rule("Claimable public holidays", "")).split(",") if to_date(x)]
+    if not ph_dates or not asked:
+        return
+    weeks = load_weeks(wb, limit=40)
+    for key, name, n_asked in asked:
+        worked = taken = 0
+        for w in weeks:
+            _, row = w.find(key)
+            if not row:
+                continue
+            for i, c in enumerate(row.codes):
+                day = w.start + timedelta(days=i)
+                if day in ph_dates and day < week_days[0] and (_worked(c) or c == "PN"):
+                    worked += 1
+                if c == "PH" and min(ph_dates) <= day < week_days[0]:
+                    taken += 1
+        if taken + n_asked > worked:
+            log(f"! {name}: {taken} PH taken + {n_asked} this week, but worked only {worked} claimable "
+                f"public holiday(s) - check.")
+
+
 def _weeks_in(counters, labels, pool):
     lab = POOL_COUNTER.get(pool, pool)
     if lab not in labels:
@@ -129,6 +165,7 @@ def generate(timetable_path, data_path, week_start=None, save=True, log=print, o
         owed=yes(rd.rule("Give owed"), True),
         junior_senior=yes(rd.rule("Juniors on night"), True),
         tag_week=yes(rd.rule("Give EMOT AM TAG"), True),
+        ward_balance=yes(rd.rule("Balance MSW and FSW"), True),
     )
     def_min = int(rd.rule("Default min nights", 1))
     def_max = int(rd.rule("Default max nights", 2))
@@ -153,28 +190,128 @@ def generate(timetable_path, data_path, week_start=None, save=True, log=print, o
         for n, unit in missing:
             rd.doctors.append(rdata.Doctor(name=n, pool=unit, nights_ok=unit in POOLS))
 
-    # ---- Pool rotation
+    # ---- POOL requests: a fixed pool / subspecialty for that week (e.g. PJHUS for one week)
+    override = {}
+    for rq in rd.requests:
+        if rq.type == "POOL" and rq.start <= week_days[-1] and rq.end >= week_start:
+            k = _match(name_key(rq.name), [d.key for d in rd.doctors])
+            if k and norm_code(rq.show_as):
+                override[k] = norm_code(rq.show_as)
+    perm_pool = {d.key: d.pool for d in rd.doctors}       # pool as written in DOCTORS
+    for d in rd.doctors:
+        if d.key in override:
+            d.pool = override[d.key]
+            log(f"POOL request: {d.name} is in {d.pool} this week.")
+
     mode = norm_code(rd.rule("Pool rotation", "SUGGEST"))
+    min_weeks = int(rd.rule("Minimum weeks in a pool", 2))
+    tag_total = int(rd.rule("Tagging days for new HOs", 14))
+    never_sub = rd.rule_list("Never in subspecialty", "")
+
+    def in_posting_all_week(d):
+        return not ((d.start and d.start > week_start) or (d.end and d.end < week_days[-1]))
+
+    def tagging(d):
+        return bool(d.start) and (week_start - d.start).days < tag_total + 7
+
+    # HOs with shift requests, leave or courses this week stay where they are
+    busy = set()
+    for rq in rd.requests:
+        if rq.type in ("WANT NIGHT", "FIXED SHIFT", "DAY SHIFT", "OFF COUNT", "AL", "MC", "EL", "PH", "COURSE") and rq.start <= week_days[-1] and rq.end >= week_start:
+            k = _match(name_key(rq.name), [d.key for d in rd.doctors])
+            if k:
+                busy.add(k)
+
+    def leaving_within(d, weeks):
+        return bool(d.end) and d.end < week_start + timedelta(days=7 * weeks)
+
+    def counters_of(d):
+        sec, row = base.find(d.key)
+        return _counters(base, sec, row, labels) if row else [0] * len(COUNTER_COLS)
+
+    # ---- Subspecialty rotation: after N weeks the HO swaps with a pool HO who has never been there
+    moved = {}
+    if mode in ("SUGGEST", "YES"):
+        lens = {}
+        for part in str(rd.rule("Subspecialty rotation weeks", "PERI 1, OTHERS 3")).upper().replace(";", ",").split(","):
+            bits = part.split()
+            if len(bits) == 2 and bits[1].isdigit():
+                lens[bits[0]] = int(bits[1])
+        lines = []
+        for u in sorted(units):
+            L = lens.get(u, lens.get("OTHERS", 3))
+            perm = [d for d in rd.doctors if d.active and perm_pool[d.key] == u and d.key not in override]
+            gone = [d for d in perm if d.end and d.end < week_start]
+            due = []
+            for d in perm:
+                if d in gone or not in_posting_all_week(d):
+                    continue
+                cur, n = rotation.consecutive_weeks(d.key, prev, _unit_of)
+                if cur == u and n >= L:
+                    due.append((d, n))
+            last_team = sum(1 for s_, r in base.all_doctors() if _unit_of(s_, r) == u and perm_pool.get(r.key) == u)
+            need = len(due) + max(0, last_team - (len(perm) - len(gone)))
+            if not need:
+                continue
+            cands = []
+            for d in rd.doctors:
+                if (not d.active or d.pool not in POOLS or d.key in override or d.key in moved or d.key in busy
+                        or any(t in d.key for t in never_sub) or tagging(d) or not in_posting_all_week(d)
+                        or leaving_within(d, L)):
+                    continue
+                cur, n = rotation.consecutive_weeks(d.key, prev, _unit_of)
+                if n < min_weeks:
+                    continue
+                been = _weeks_in(counters_of(d), labels, u)
+                cands.append(((been > 0, -n), d))
+            cands.sort(key=lambda t: t[0])
+            picked = [d for _, d in cands[:need]]
+            for i, inc in enumerate(picked):
+                moved[inc.key] = u
+                if i < len(due):
+                    out_doc, n_out = due[i]
+                    moved[out_doc.key] = inc.pool
+                    lines.append(f"{u}: {out_doc.name} ({n_out} weeks) -> {inc.pool};  {inc.name} ({inc.pool}) -> {u}")
+                else:
+                    lines.append(f"{u}: {inc.name} ({inc.pool}) -> {u} (fills a place left by end of posting)")
+            if len(picked) < need:
+                lines.append(f"{u}: needs {need - len(picked)} more HO(s) but nobody suitable was free")
+        if lines:
+            log("")
+            log(f"Subspecialty rotation ({mode}):")
+            for line in lines:
+                log(("  MOVED " if mode == "YES" else "  suggest ") + line)
+        if mode == "YES" and moved:
+            for d in rd.doctors:
+                if d.key in moved:
+                    d.pool = moved[d.key]
+            if not rdata.set_pools(data_path, moved):
+                log("! Could not update Pool in Roster Data (file open?) - moves used for this week only.")
+        else:
+            moved = {}
+
+    # ---- Pool rotation (ETD / MSW / FSW): due after N weeks, or when one pool is 3+ weeks heavier
     if mode in ("SUGGEST", "YES"):
         due_after = int(rd.rule("Weeks in a pool before", 4))
-        min_weeks = int(rd.rule("Minimum weeks in a pool", 2))
         cands = []
         for d in rd.doctors:
-            if not d.active or d.pool not in POOLS:
+            if not d.active or d.pool not in POOLS or d.key in moved or d.key in override:
                 continue
             sec, row = base.find(d.key)
             if not row or _unit_of(sec, row) != d.pool:
                 continue      # new, or already moved by hand
-            if d.end and d.end <= week_days[-1] + timedelta(days=7):
-                continue      # leaving soon
+            if leaving_within(d, min_weeks + 1):
+                continue      # leaving soon - not worth moving
             cur, n = rotation.consecutive_weeks(d.key, prev, _unit_of)
-            if n >= max(due_after, min_weeks):
-                ctr = _counters(base, sec, row, labels)
-                cands.append((d.key, cur, {p: _weeks_in(ctr, labels, p) for p in POOLS}, n, d.name))
+            wk = {p: _weeks_in(counters_of(d), labels, p) for p in POOLS}
+            heavy = cur in POOLS and wk[cur] - min(wk[q] for q in POOLS if q != cur) >= 3
+            if n >= min_weeks and (n >= due_after or heavy):
+                cands.append((d.key, cur, wk, n, d.name))
         moves = rotation.plan([(k, c, w) for k, c, w, _, _ in cands])
         if cands:
             log("")
-            log(f"Pool rotation ({mode}): {len(cands)} HO(s) have done {due_after}+ weeks in the same pool.")
+            log(f"Pool rotation ({mode}): {len(cands)} HO(s) due ({due_after}+ weeks in a row, "
+                f"or 3+ weeks more than in another pool).")
             for k, cur, wk, n, name in cands:
                 if k in moves:
                     new = moves[k]
@@ -226,8 +363,19 @@ def generate(timetable_path, data_path, week_start=None, save=True, log=print, o
         sec, row = base.find(d.key)
         if row:
             p.last_codes = row.codes
-            p.owed = row.owed
+            # worked all of last week with no off day -> one OFF (owe) this week ("*owe" notes are ignored)
+            p.owed = 1 if all(_worked(c) or c == "PN" for c in row.codes) else 0
             p.carry_pn = row.carry == "PN" or row.codes[6] in night_codes
+        ctr = counters_of(d)
+        p.unit_exp = {u for u in units if _weeks_in(ctr, labels, u) > 0}
+        p.no_unit = any(t in d.key for t in never_sub)
+        if d.start and d.pool in ("MSW", "FSW") and tag_total:
+            done = _last_tag(row)
+            if done is None:
+                done = tag_total if row else max(0, (week_start - d.start).days)
+            if done < tag_total:
+                p.tag_code, p.tag_left = f"{d.pool} TAG", tag_total - done
+                p.tag_done = done
         p.hist = hist.get(d.key, {})
         people.append(p)
     by_key = {p.key: p for p in people}
@@ -254,16 +402,23 @@ def generate(timetable_path, data_path, week_start=None, save=True, log=print, o
         for d in days:
             if d in p.fixed and p.fixed[d] == "":
                 continue      # outside the posting
-            if rq.type in LEAVE_CODES or rq.type == "COURSE":
+            if rq.type == "MC":
+                # pre-booked MC: shown as a normal day shift (they apply MC on the day), not counted in staffing
+                p.fixed[d] = rq.show_as or (f"{p.pool} SD" if p.pool in ("MSW", "FSW") else
+                                            "ETD AM" if p.pool == "ETD" else p.pool)
+            elif rq.type in LEAVE_CODES or rq.type == "COURSE":
                 p.fixed[d] = rq.type if rq.type in LEAVE_CODES else (rq.show_as or "COURSE")
             elif rq.type == "OFF":
                 (p.must_off.add(d) if rq.must else p.prefer.append((d, "OFF", "")))
+                if rq.show_as:
+                    p.off_label[d] = rq.show_as      # e.g. "OFF (owe)"
             elif rq.type == "NO NIGHT":
                 (p.must_no_night.add(d) if rq.must else p.prefer.append((d, "NO NIGHT", "")))
             elif rq.type == "WANT NIGHT":
-                if not p.nights_ok:
-                    why = "subspecialty HOs do no nights" if p.is_unit else "Nights allowed = NO"
-                    log(f"! {p.name} asked for a night on {DAY_NAMES[d]} but {why} - skipped.")
+                if p.is_unit:
+                    p.night_days.add(d)    # allowed; a pool HO covers the unit that day
+                elif not p.nights_ok:
+                    log(f"! {p.name} asked for a night on {DAY_NAMES[d]} but Nights allowed = NO - skipped.")
                     continue
                 (p.must_night.add(d) if rq.must else p.prefer.append((d, "WANT NIGHT", "")))
             elif rq.type == "DAY SHIFT":
@@ -276,8 +431,15 @@ def generate(timetable_path, data_path, week_start=None, save=True, log=print, o
                     p.fixed[d] = rq.show_as or code
             elif rq.type == "ONLY SHIFT":
                 p.only[d] = {norm_code(c) for c in rq.show_as.split(",") if c.strip()}
+            elif rq.type == "OFF TAG" and p.tag_code:
+                p.tag_stop = min(p.tag_stop, d)       # tagging ends from this day
         log(f"Request: {rq.name} {rq.type} {span}" + (f" ({rq.show_as})" if rq.show_as else "")
             + ("" if rq.must else " (prefer)"))
+    for rq in rd.requests:       # OFF TAG before this week: tagging already finished
+        if rq.type == "OFF TAG" and rq.start < week_start:
+            k = _match(name_key(rq.name), all_keys)
+            if k:
+                by_key[k].tag_code, by_key[k].tag_left = "", 0
     # look ahead: a request on next Monday means no night this Sunday (it would make Monday PN)
     next_mon = week_start + timedelta(days=7)
     for rq in rd.requests:
@@ -287,6 +449,8 @@ def generate(timetable_path, data_path, week_start=None, save=True, log=print, o
                 by_key[k].must_no_night.add(6)
                 log(f"Note: {by_key[k].name} has {rq.type} on Mon {next_mon:%d/%m} - no night this Sunday.")
     for p in people:
+        if p.night_days:             # subspecialty HO who asked for a night
+            p.nights_ok, p.min_nights, p.max_nights = True, 0, len(p.night_days)
         if p.carry_pn and 0 in p.fixed and p.fixed[0]:
             log(f"! {p.name}: had a night last Sunday but has {p.fixed[0]} on Monday - PN dropped.")
             p.carry_pn = False
@@ -295,6 +459,24 @@ def generate(timetable_path, data_path, week_start=None, save=True, log=print, o
         if len(p.must_night) > p.max_nights and p.nights_ok:
             log(f"Note: {p.name} asked for {len(p.must_night)} nights this week - max raised from {p.max_nights}.")
             p.max_nights = len(p.must_night)
+
+    # ---- Leave checks (warnings only)
+    al_max = int(rd.rule("Max AL per posting", 8))
+    mc_free = int(rd.rule("MC days before they count as AL", 2))
+    asked_ph = []
+    for p in people:
+        al = mc = 0
+        for rq in rd.requests:
+            if _match(name_key(rq.name), all_keys) == p.key:
+                n = (rq.end - rq.start).days + 1
+                al += n if rq.type == "AL" else 0
+                mc += n if rq.type == "MC" else 0
+        if al + max(0, mc - mc_free) > al_max:
+            log(f"! {p.name}: {al} AL + {max(0, mc - mc_free)} extra MC = more than {al_max} AL days - check.")
+        ph = sum(1 for t in p.fixed.values() if t == "PH")
+        if ph:
+            asked_ph.append((p.key, p.name, ph))
+    _ph_check(wb, asked_ph, rd, week_days, log)
 
     # ---- Pairs
     pair_rules = []
@@ -313,15 +495,37 @@ def generate(timetable_path, data_path, week_start=None, save=True, log=print, o
         pair_rules.append(PairRule(person=k, partners=partners, shifts=pr.shifts, must=pr.must,
                                    label=f"PAIRS row {pr.row}: {label}"))
 
+    # ---- Extra staffing rules made from this week's people
+    staffing = [replace(sr, codes=with_tags(sr.codes)) for sr in rd.staffing]   # tagging HOs count as ward LD
+    open_codes = set(rd.open_codes)
+    for tag in sorted({p.tag_code for p in people if p.tag_code}):
+        staffing.append(StaffRule(codes=[tag], days=set(range(7)), min=0, target=0, max=50, label=tag))
+    have = {c for sr in staffing for c in sr.codes}
+    for u in sorted(units - have):
+        team = sum(1 for p in people if p.is_unit and p.pool == u)
+        if team:      # weekdays: cover MC / AL / PH from the pools if they can spare someone
+            staffing.append(StaffRule(codes=[u], days={0, 1, 2, 3, 4}, min=0, target=team, max=team, label=u))
+            open_codes.add(u)
+
     # ---- Solve
     log(f"Scheduling {len(people)} HOs (up to {time_limit}s)...")
-    res = solve(people, rd.staffing, night_codes, rules, seed=week_start.toordinal(), time_limit=time_limit,
-                log=log, open_codes=rd.open_codes, night_groups=rd.night_groups, pairs=pair_rules)
+    res = solve(people, staffing, night_codes, rules, seed=week_start.toordinal(), time_limit=time_limit,
+                log=log, open_codes=open_codes, night_groups=rd.night_groups, pairs=pair_rules, units=units)
     log(f"Solver: {res.status}")
     if not res.grid:
         for i in res.issues:
             log("! " + i)
         raise RosterError(res.issues[0])
+
+    # ---- TAG n numbering (counts working days since the HO started)
+    for p in people:
+        if p.tag_code:
+            n = getattr(p, "tag_done", 0)
+            row = res.grid[p.key]
+            for i, c in enumerate(row):
+                if c == p.tag_code:
+                    n += 1
+                    row[i] = f"{c} {n}"
 
     # ---- Build output sections
     style_map = build_style_map(prev[:6])
@@ -340,10 +544,9 @@ def generate(timetable_path, data_path, week_start=None, save=True, log=print, o
             row_label = (sec.doctors[0].label if sec and sec.doctors else label) if pool else None
             for p in members:
                 psec, src_row = base.find(p.key)
-                note = src_row.note if src_row else ""
-                if src_row and p.owed:
-                    left = p.owed - res.owed_given.get(p.key, 0)
-                    note = f"*owe {left} off" if left else ""
+                note = src_row.note if src_row and "owe" not in src_row.note.lower() else ""
+                if p.owed and p.owed > res.owed_given.get(p.key, 0):
+                    note = f"*owe {p.owed - res.owed_given.get(p.key, 0)} off"
                 counters = _counters(base, psec, src_row, labels) if src_row else [0] * len(COUNTER_COLS)
                 hl = POOL_COUNTER.get(p.pool, p.pool)
                 rows.append(OutRow(

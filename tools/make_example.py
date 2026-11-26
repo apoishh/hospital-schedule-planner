@@ -54,6 +54,10 @@ REQUESTS = [
     ("FARAH", D(30, 11), D(13, 12), "ONLY SHIFT", "MSW LD", None, "new HO: MSW LD only for 2 weeks"),
     ("NADIA HUDA", D(7, 12), D(13, 12), "OFF COUNT", "0", None, "no off day that week (e.g. to claim later)"),
     ("HANNAH", D(10, 12), None, "AL", None, None, "subspecialty HOs can have leave too"),
+    ("NADIA HUDA", D(15, 12), None, "OFF", "OFF (owe)", "MUST", "owed off, shown as OFF (owe)"),
+    ("AISYAH", D(14, 12), D(20, 12), "POOL", "PJHUS", None, "in PJHUS for that week, then back to her pool"),
+    ("FARAH", D(10, 12), None, "OFF TAG", None, None, "new HO stops tagging from this day"),
+    ("AHMAD FAIZ", D(9, 12), None, "WANT NIGHT", None, "MUST", "subspecialty HO asks for ON - a pool HO covers VAS"),
 ]
 
 # Person, Together with, On these shifts, Must/Prefer, Notes
@@ -61,6 +65,7 @@ PAIRS = [
     ("DANIEL", "AISYAH, MICHAEL", "ETD ON, EMOT PM", "MUST", "junior always with one of these two on night"),
     ("PRIYA", "", "EMOT AM TAG", "MUST", "blank partner = any senior; TAG partner = an EMOT AM that day"),
     ("NADIA HUDA", "JASON", "MSW ON", "PREFER", "friends who want nights together"),
+    ("AISYAH", "DANIEL, MICHAEL", "SAME", "PREFER", "off days and nights on the same days"),
 ]
 
 

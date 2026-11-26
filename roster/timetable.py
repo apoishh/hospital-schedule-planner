@@ -8,6 +8,7 @@ A week sheet looks like:
     TOTAL rows     B starts with 'TOTAL'
     ... repeated for MSW, FSW, SUBSPEC, EOP, then a colour legend.
 """
+import re
 from copy import copy
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -228,7 +229,7 @@ def write_week(wb, base, title, start, out_sections, style_map, red_cells=()):
             break
 
     def day_style(cell, code):
-        tpl = style_map.get(norm_code(code))
+        tpl = style_map.get(norm_code(code)) or style_map.get(re.sub(r" TAG \d+$", " LD", norm_code(code)))
         if tpl is not None:
             cell._style = copy(tpl._style)
         elif any_day_cell is not None:

@@ -30,7 +30,7 @@ W_HPB_OFF_DAY = 500      # HPB team HO off outside the HPB off days
 W_MIN_NIGHTS = 400
 W_BORROW = 250           # > what a borrowed night frees up: only borrow to fill real gaps
 W_OWED_OFF = 150
-W_ABOVE_MAX = 120
+W_ABOVE_MAX = 300        # > W_BORROW: e.g. a 10th ward day doctor is moved to ETD AM instead
 W_BELOW_TARGET = 60
 W_ON_PN_ON = 45
 W_PREFER = 40
@@ -38,12 +38,20 @@ W_PAIR_PREFER = 40
 W_TAG_WEEK = 30          # untrained HO gets no EMOT AM TAG this week
 W_HPB_CHANGE = 30
 W_SPECIAL_REPEAT = 25
+W_EMOT_REPEAT = 35       # a 2nd EMOT shift (AM / PM / TAG) for the same HO in one week
+W_SUB_UNIT = 40          # a pool HO covering a subspecialty for a day (20 if they have worked there)
+W_TAG_SHORT = 300        # a tagging HO given fewer TAG days than they still need
+W_SAME_TYPE = 15         # "SAME" pair: one is off/night and the other is not
 W_SUB_OFF_PREF = 20      # subspecialty HO off on a weekday
 W_SAME_NIGHT_DAY = 20
 W_SAME_OFF_DAY = 15
 W_SAME_CODE = 3
 
 SPECIALS = ("SCOPE/CLINIC", "CLINIC", "SCOPE", "MINOR OT", "HPB")
+WARDS = ("MSW", "FSW")
+WARD_DAY = {"MSW SD", "MSW LD", "FSW SD", "FSW LD"}   # only MSW / FSW HOs work these
+W_WARD_BALANCE = 500     # per HO of difference between MSW and FSW day doctors
+W_WARD_SWAP = 15         # an MSW HO on an FSW day shift (or the other way) - normal, cheap
 
 
 @dataclass
@@ -67,6 +75,13 @@ class Person:
     must_night: set = field(default_factory=set)
     must_day: set = field(default_factory=set)       # DAY SHIFT
     prefer: list = field(default_factory=list)       # (day, kind, code)
+    night_days: set = field(default_factory=set)     # subspecialty HO: days they asked to do a night
+    no_unit: bool = False     # never put in a subspecialty (RULES: Never in subspecialty)
+    unit_exp: set = field(default_factory=set)       # subspecialties this HO has worked in before
+    tag_code: str = ""        # e.g. "MSW TAG" while a new HO is still tagging
+    tag_left: int = 0         # TAG days still to do
+    tag_stop: int = 7         # first day index that is no longer tagging (OFF TAG request)
+    off_label: dict = field(default_factory=dict)    # day -> text to show for a requested OFF, e.g. "OFF (owe)"
     off_allowed: set = None   # e.g. HPB team: {3,4,5,6}
     off_pref: set = None      # e.g. subspecialty: {5,6}
     carry_pn: bool = False
@@ -94,11 +109,12 @@ class Result:
 
 
 def solve(people, staffing, night_codes, rules, seed=0, time_limit=30, log=print,
-          open_codes=(), night_groups=(), pairs=()):
+          open_codes=(), night_groups=(), pairs=(), units=()):
     m = cp_model.CpModel()
     rnd = random.Random(seed)
     borrow = rules.get("borrow", True)
     open_codes = set(open_codes)
+    units = set(units)
     D = range(7)
     by_key = {p.key: p for p in people}
 
@@ -111,12 +127,25 @@ def solve(people, staffing, night_codes, rules, seed=0, time_limit=30, log=print
         for c in g:
             group_of[c] = set(g)
 
+    def tag_full(p):
+        """Still tagging for every working day before tag_stop (the usual case)."""
+        window = [d for d in D if d < p.tag_stop and d not in p.fixed]
+        return p.tag_code and p.tag_left >= len(window)
+
     def allowed(p, d):
         if p.is_unit:
-            return [p.pool]
+            return [p.pool] + sorted(c for c in day_codes[d] if c in night_codes and d in p.night_days)
+        if p.tag_code and d < p.tag_stop and p.tag_left > 0 and tag_full(p):
+            return [p.tag_code]
         out = []
         for c in sorted(day_codes[d]):
             pool = code_pool(c)
+            if c.endswith(" TAG") and c != "EMOT AM TAG" and not (c == p.tag_code and d < p.tag_stop and p.tag_left > 0):
+                continue          # ward TAG codes are only for HOs still tagging
+            if c in units and p.no_unit:
+                continue
+            if c in WARD_DAY and p.pool not in WARDS:
+                continue          # ETD / subspecialty HOs never do ward day shifts
             if c in night_codes and (not p.nights_ok or p.max_nights == 0):
                 continue
             if c == "EMOT AM" and not p.trained:
@@ -257,19 +286,68 @@ def solve(people, staffing, night_codes, rules, seed=0, time_limit=30, log=print
                     cost += W_SAME_CODE
             pool = code_pool(c)
             if pool and pool != p.pool and c not in open_codes and not p.is_unit:
-                cost += W_BORROW
+                cost += W_WARD_SWAP if c in WARD_DAY else W_BORROW
             if c in night_codes:
                 cost += 2 * h.get("nights", 0)
                 if d >= 4:
                     cost += 4 + 4 * h.get("weekend_nights", 0)
             if c in SPECIALS and not p.is_unit:
                 cost += 4 + 6 * h.get("special", 0)
+            if c in units and not p.is_unit:
+                cost += W_SUB_UNIT // 2 if c in p.unit_exp else W_SUB_UNIT
             if c.endswith(" LD"):
                 cost += 1 + 2 * h.get("ld", 0)
             if c == OFF and d >= 5 and not p.is_unit:
                 cost += 2 * h.get("weekend_offs", 0)
             if cost:
                 objective.append(cost * v)
+
+    # tagging that ends this week: exactly the TAG days still needed, all before any normal day
+    for p in people:
+        if not p.tag_code or p.tag_left <= 0 or tag_full(p):
+            continue
+        window = [d for d in D if d < p.tag_stop and d not in p.fixed]
+        tags = {d: x[p.key, d, p.tag_code] for d in window if (p.key, d, p.tag_code) in x}
+        if not tags:
+            continue
+        short = m.NewIntVar(0, p.tag_left, "")
+        m.Add(sum(tags.values()) + short == min(p.tag_left, len(window)))
+        objective.append(W_TAG_SHORT * short)
+        for d in window:
+            work = [x[p.key, d, c] for c in allowed(p, d) if c != p.tag_code]
+            for e in window:
+                if e > d and e in tags:
+                    m.Add(sum(work) + tags[e] <= 1)
+
+    # wards: same number of day doctors (SD + LD + tagging HOs) in MSW and FSW every day
+    if rules.get("ward_balance", True):
+        for d in D:
+            ms = [v for (k, dd, c), v in x.items() if dd == d and c in ("MSW SD", "MSW LD", "MSW TAG")]
+            fs = [v for (k, dd, c), v in x.items() if dd == d and c in ("FSW SD", "FSW LD", "FSW TAG")]
+            if ms and fs:
+                diff = m.NewIntVar(0, 60, "")
+                m.Add(diff >= sum(ms) - sum(fs))
+                m.Add(diff >= sum(fs) - sum(ms))
+                objective.append(W_WARD_BALANCE * diff)
+
+    # wards: on a day with a tagging HO, only 1 LD
+    for d in D:
+        for ward in ("MSW", "FSW"):
+            tagv = [v for (k, dd, c), v in x.items() if dd == d and c == f"{ward} TAG"]
+            if tagv:
+                ldv = [v for (k, dd, c), v in x.items() if dd == d and c == f"{ward} LD"]
+                anytag = m.NewBoolVar("")
+                for v in tagv:
+                    m.Add(anytag >= v)
+                m.Add(sum(ldv) + anytag <= 2)
+
+    # at most one EMOT shift (AM / PM / TAG) per HO per week unless needed
+    for p in people:
+        ev = [v for (k, d, c), v in x.items() if k == p.key and c.startswith("EMOT")]
+        if len(ev) > 1:
+            extra = m.NewIntVar(0, len(ev), "")
+            m.Add(extra >= sum(ev) - 1)
+            objective.append(W_EMOT_REPEAT * extra)
 
     # EMOT AM TAG only next to an EMOT AM (hard), and untrained HOs get a TAG each week (goal)
     for d in D:
@@ -306,6 +384,22 @@ def solve(people, staffing, night_codes, rules, seed=0, time_limit=30, log=print
     for pr in pairs:
         p = by_key.get(pr.person)
         if not p:
+            continue
+        if pr.shifts == ["SAME"]:      # similar day type (off / night) as the partners
+            for k in pr.partners:
+                q = by_key.get(k)
+                if not q:
+                    continue
+                for d in D:
+                    if d in p.fixed or d in q.fixed:
+                        continue
+                    for a, b in ((off[p.key, d], off[q.key, d]), (nexpr(p, d), nexpr(q, d))):
+                        if isinstance(a, int) and isinstance(b, int):
+                            continue
+                        diff = m.NewBoolVar("")
+                        m.Add(diff >= a - b)
+                        m.Add(diff >= b - a)
+                        objective.append(W_SAME_TYPE * diff)
             continue
         shifts = pr.shifts or sorted(night_codes)
         for d in D:
@@ -396,9 +490,12 @@ def solve(people, staffing, night_codes, rules, seed=0, time_limit=30, log=print
         g = solver.Value(p._owed_var)
         owed_given[p.key] = g
         if g:
-            idx = [i for i, c in enumerate(row) if c == OFF][-g:]
+            idx = [i for i, c in enumerate(row) if c == OFF][:g]
             for i in idx:
                 row[i] = "OFF (owe)"
+        for d, text in p.off_label.items():
+            if row[d] == OFF:
+                row[d] = text
         grid[p.key] = row
         if row[6] in night_codes:
             sunday.add(p.key)
@@ -444,11 +541,11 @@ def solve(people, staffing, night_codes, rules, seed=0, time_limit=30, log=print
         row = grid[p.key]
         n = sum(1 for c in row if is_night(c))
         free = [d for d in D if d not in p.fixed]
-        if p.nights_ok and not p.is_unit and len(free) >= 4 and n < p.min_nights and not p.only:
+        if p.nights_ok and not p.is_unit and len(free) >= 4 and n < p.min_nights and not p.only and not p.tag_code:
             issues.append(f"{p.name}: only {n} night(s) (min {p.min_nights}).")
         for d, c in enumerate(row):
             pool = code_pool(c)
-            if pool and pool != p.pool and c not in open_codes and not p.is_unit:
+            if pool and pool != p.pool and c not in open_codes and not p.is_unit and c not in WARD_DAY:
                 issues.append(f"borrowed: {p.name} ({p.pool}) covers {c} on {DAY_NAMES[d]}.")
             if p.off_allowed is not None and c.startswith("OFF") and d not in p.off_allowed:
                 issues.append(f"{p.name}: off on {DAY_NAMES[d]} (HPB team offs are normally "

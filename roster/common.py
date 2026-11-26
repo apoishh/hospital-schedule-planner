@@ -18,6 +18,12 @@ LEAVE_CODES = {"AL", "MC", "EL", "PH"}
 ALIASES = {"CLINIC": "SCOPE/CLINIC", "SCOPE": "SCOPE/CLINIC"}
 
 
+def with_tags(codes):
+    """A ward's SD + LD total also counts its tagging HOs (MSW TAG / FSW TAG count as LD)."""
+    return list(codes) + [f"{w} TAG" for w in ("MSW", "FSW")
+                          if {f"{w} SD", f"{w} LD"} <= set(codes) and f"{w} TAG" not in codes]
+
+
 def norm_code(v):
     if v is None:
         return ""

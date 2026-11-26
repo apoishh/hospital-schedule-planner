@@ -3,12 +3,13 @@
 python -m roster.check TIMETABLE.xlsx ROSTERDATA.xlsx [--sheet 3011-61226]
 """
 import argparse
+import re
 from datetime import timedelta
 
 import openpyxl
 
 from . import data as rdata
-from .common import ALIASES, DAY_NAMES, SECTION_TO_POOL, name_key
+from .common import ALIASES, DAY_NAMES, SECTION_TO_POOL, name_key, with_tags
 from .timetable import load_weeks, parse_week
 
 
@@ -24,11 +25,19 @@ def check_week(week, prev_week, rd):
     week_end = week.start + timedelta(days=6)
     off_count = {}   # OFF COUNT requests overlapping this week
     asked_nights = {}  # MUST WANT NIGHT days this week (can raise max nights)
+    night_days = set()  # (doctor key, day index) with a WANT NIGHT request
+    dummy = set()  # (doctor key, day index) with a pre-booked MC: shown as a day shift, not counted
     for rq in rd.requests:
+        if rq.type == "MC" and rq.start <= week_end and rq.end >= week.start:
+            hits = [k for k in docs if name_key(rq.name) in k]
+            if len(hits) == 1:
+                dummy |= {(hits[0], i) for i in range(7)
+                          if rq.start <= week.start + timedelta(days=i) <= rq.end}
         if rq.type == "WANT NIGHT" and rq.must and week.start <= rq.start <= week_end:
             hits = [k for k in docs if name_key(rq.name) in k]
             if len(hits) == 1:
                 asked_nights[hits[0]] = asked_nights.get(hits[0], 0) + 1
+                night_days.add((hits[0], (rq.start - week.start).days))
         if rq.type == "OFF COUNT" and rq.start <= week_end and rq.end >= week.start:
             hits = [k for k in docs if name_key(rq.name) in k]
             if len(hits) == 1:
@@ -49,8 +58,9 @@ def check_week(week, prev_week, rd):
         offs = sum(1 for x in c if x.startswith("OFF"))
         prev = prev_week.find(d.key)[1] if prev_week else None
         carry = prev and (prev.carry == "PN" or prev.codes[6] in night)
-        if not pool and n:
-            issues.append(f"{d.name}: subspecialty HO ({unit}) has {n} night(s)")
+        asked = sum(1 for i, x in enumerate(c) if x in night and (d.key, i) in night_days)
+        if not pool and n > asked:
+            issues.append(f"{d.name}: subspecialty HO ({unit}) has {n - asked} night(s) they did not ask for")
         if doc and not doc.nights_ok and n:
             issues.append(f"{d.name}: has {n} night(s) but Nights allowed = NO")
         mx = doc.max_nights if doc and doc.max_nights is not None else def_max
@@ -71,12 +81,14 @@ def check_week(week, prev_week, rd):
                 issues.append(f"{d.name}: {DAY_NAMES[i]} is blank")
             if doc and not doc.emot_trained and c[i] == "EMOT AM":
                 issues.append(f"{d.name}: EMOT AM on {DAY_NAMES[i]} but not EMOT AM trained (should be EMOT AM TAG)")
-            if not pool and c[i].startswith("EMOT"):
+            if not pool and c[i].startswith("EMOT") and (d.key, i) not in night_days:
                 issues.append(f"{d.name}: subspecialty HO on {c[i]} ({DAY_NAMES[i]})")
         if c[6] in night and d.carry != "PN":
             issues.append(f"{d.name}: night on Sunday - column J should say PN")
         for i, x in enumerate(c):
-            x = ALIASES.get(x, x)
+            if (d.key, i) in dummy:
+                continue
+            x = ALIASES.get(x, re.sub(r" TAG \d+$", " TAG", x))   # MSW TAG 3 -> MSW TAG
             counts[(x, i)] = counts.get((x, i), 0) + 1
             on_day.setdefault((x, i), []).append(d)
     # EMOT AM TAG always next to an EMOT AM
@@ -94,7 +106,7 @@ def check_week(week, prev_week, rd):
                               f"{DAY_NAMES[i]} without a senior")
     for sr in rd.staffing:
         for d in sorted(sr.days):
-            n = sum(counts.get((code, d), 0) for code in sr.codes)
+            n = sum(counts.get((code, d), 0) for code in with_tags(sr.codes))
             if n < sr.min:
                 issues.append(f"SHORT: {sr.label} on {DAY_NAMES[d]}: {n} (min {sr.min})")
             elif n > sr.max:

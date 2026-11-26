@@ -79,6 +79,7 @@ WHAT IT DOES
   AISYAH       02/12/2026  06/12/2026  AL
   DANIEL       25/12/2026              PH
   PRIYA        05/12/2026              COURSE       Stroke course
+  JASON        04/12/2026              MC                          (pre-booked MC, see below)
   NADIA HUDA   30/11/2026              WANT NIGHT                  MUST
   MICHAEL      05/12/2026              OFF                         MUST
   SITI AMINAH  04/12/2026  06/12/2026  NO NIGHT                    PREFER
@@ -86,6 +87,18 @@ WHAT IT DOES
   MICHAEL      03/12/2026              FIXED SHIFT  MINOR OT
   FARAH        30/11/2026  13/12/2026  ONLY SHIFT   MSW LD         (new HO: LD only)
   NADIA HUDA   07/12/2026  13/12/2026  OFF COUNT    0              (no off that week)
+  NADIA HUDA   15/12/2026              OFF          OFF (owe)      (owed off, shown as OFF (owe))
+  AISYAH       14/12/2026  20/12/2026  POOL         PJHUS          (in PJHUS for that week)
+  FARAH        10/12/2026              OFF TAG                     (new HO stops tagging)
+
+  New HOs: give them a Start date in DOCTORS. They tag automatically
+  (MSW TAG 1 ... 14, no nights) until 14 working days or an OFF TAG.
+  Courses that count as work (e.g. Mass circumcision): COURSE.
+  MC asked for in advance: the timetable shows a normal day shift (SD,
+  or ETD AM for ETD HOs) as a dummy - they apply MC on the day itself.
+  That HO is NOT counted in the staffing that day. Put text in Show as
+  (e.g. MC) to show something else.
+  Courses that count as an off day (e.g. NSX workshop): OFF.
 
   MUST   = always done unless impossible (then shown in red with the reason).
   PREFER = done if it fits.
@@ -101,6 +114,7 @@ WHAT IT DOES
   DANIEL   AISYAH, MICHAEL      ETD ON, EMOT PM     MUST
   NADIA    JASON                MSW ON              PREFER
   PRIYA    (blank = any senior) EMOT AM TAG         MUST
+  AISYAH   DANIEL, MICHAEL      SAME                PREFER   (off/nights on the same days)
 
 
 7. VIEWER WEBSITE (read-only page for all HOs)

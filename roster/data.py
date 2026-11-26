@@ -27,22 +27,23 @@ DOCTOR_COLS = ["Name", "Pool", "Nights allowed", "Min nights", "Max nights", "Of
                "Junior (1st posting)", "EMOT AM trained", "Start date", "Last day (EOP)", "Active", "Notes"]
 REQUEST_COLS = ["Name", "From", "To", "Type", "Show as", "Must or Prefer", "Notes"]
 REQUEST_TYPES = ["AL", "MC", "EL", "PH", "COURSE", "OFF", "NO NIGHT", "WANT NIGHT", "DAY SHIFT",
-                 "FIXED SHIFT", "ONLY SHIFT", "OFF COUNT"]
+                 "FIXED SHIFT", "ONLY SHIFT", "OFF COUNT", "POOL", "OFF TAG"]
 PAIR_COLS = ["Person", "Together with (names, comma - blank = any senior)",
              "On these shifts (blank = any night)", "Must or Prefer", "Notes"]
 STAFF_COLS = ["Shift (use + to add shifts together)", "Days", "Min", "Target", "Max", "Notes"]
 
 DEFAULT_STAFFING = [
-    ("ETD AM", "Mon-Sun", 2, 3, 3, "ETD morning"),
+    ("ETD AM", "Mon-Sun", 2, 3, 5, "ETD morning (MSW/FSW HOs move here when a ward has more than 9)"),
+    ("ETD AM + EMOT AM", "Mon-Sun", 0, 0, 7, "ETD/EMOT morning in total: at most 7 (ETD AM 5 + EMOT AM 2)"),
     ("EMOT AM", "Mon-Sun", 1, 1, 2, "Emergency OT morning - only HOs with EMOT AM trained = YES"),
     ("EMOT AM TAG", "Mon-Sun", 0, 0, 1, "HO learning EMOT AM, always with an EMOT AM the same day"),
     ("ETD ON", "Mon-Sun", 2, 2, 3, "ETD night"),
     ("EMOT PM", "Mon-Sun", 1, 1, 1, "EMOT night (followed by PN)"),
-    ("MSW SD + MSW LD", "Mon-Sun", 5, 6, 12, "MSW day doctors in total"),
-    ("MSW LD", "Mon-Sun", 1, 1, 6, "how many of them do long day"),
+    ("MSW SD + MSW LD", "Mon-Sun", 5, 6, 9, "MSW day doctors in total (tagging HOs count as LD); over 9 -> ETD AM"),
+    ("MSW LD", "Mon-Sun", 1, 1, 2, "long day (only 1 on days with a tagging HO)"),
     ("MSW ON", "Mon-Sun", 2, 2, 2, "MSW night"),
-    ("FSW SD + FSW LD", "Mon-Sun", 4, 5, 12, "FSW day doctors in total"),
-    ("FSW LD", "Mon-Sun", 1, 1, 6, "how many of them do long day"),
+    ("FSW SD + FSW LD", "Mon-Sun", 4, 5, 9, "FSW day doctors in total (tagging HOs count as LD); over 9 -> ETD AM"),
+    ("FSW LD", "Mon-Sun", 1, 1, 2, "long day (only 1 on days with a tagging HO)"),
     ("FSW ON", "Mon-Sun", 2, 2, 2, "FSW night"),
     ("SCOPE/CLINIC", "Mon-Wed", 1, 2, 2, "from any pool"),
     ("MINOR OT", "Thu", 1, 1, 1, "from any pool"),
@@ -71,8 +72,19 @@ DEFAULT_RULES = [
     ("Avoid night right after post-night (ON, PN, ON)", "YES", "Tries hard not to, but allows it if there is no other way."),
     ("Make each week different from last week", "YES", "Avoids the same night day / off day as last week."),
     ("HPB: same pool doctor for all HPB days", "YES", "Prefer one pool HO for the HPB cover days of the week."),
+    ("Subspecialty rotation weeks", "PERI 1, OTHERS 3",
+     "Weeks in a subspecialty before the HO swaps with a pool HO who has never been there (starts on a Monday)."),
+    ("Never in subspecialty", "", "Names (or parts), comma-separated, never moved into or covering a subspecialty."),
+    ("Tagging days for new HOs", 14,
+     "HOs with a Start date tag in MSW/FSW for this many working days (MSW TAG 1, 2 ...). OFF TAG request ends it early."),
+    ("Max AL per posting", 8, "Warns when an HO's AL requests go over this (PH is unlimited)."),
+    ("MC days before they count as AL", 2, "MC beyond this many days counts against AL in the warning."),
+    ("Claimable public holidays", "17/6/2026, 22/7/2026, 25/8/2026, 31/8/2026, 16/9/2026, 10/10/2026, 25/12/2026",
+     "A PH request is only valid if the HO worked one of these days (any shift, incl. PN). The app warns otherwise."),
+    ("Balance MSW and FSW day doctors 1:1", "YES",
+     "Same number of SD + LD doctors (tagging HOs count as LD) in MSW and FSW every day. MSW and FSW HOs may work each other's day shifts; ETD and subspecialty HOs never do."),
     ("Give owed offs", "YES", "Reads '*owe 1 off' notes in column K and tries to give the extra off."),
-    ("Pool rotation", "SUGGEST",
+    ("Pool rotation", "YES",
      "NO = never. SUGGEST = list who is due to move and where. YES = move them automatically (Pool in DOCTORS is updated)."),
     ("Weeks in a pool before rotating", 4, "An HO becomes due to move after this many weeks in a row in the same pool."),
     ("Minimum weeks in a pool", 2, "Never move an HO who has been in their pool fewer weeks than this."),
@@ -226,6 +238,7 @@ HOW_TO = [
     ("EXAMPLES - REQUESTS  (Name can be any unique part of the name, e.g. AISYAH)", "head"),
     ("  Annual leave 2-6 Dec:            AISYAH | 02/12/2026 | 06/12/2026 | AL", None),
     ("  Public holiday replacement:      DANIEL | 25/12/2026 |           | PH", None),
+    ("  Pre-booked MC (dummy day shift): JASON | 04/12/2026 |            | MC  (shows SD/ETD AM, not counted)", None),
     ("  Course:                          PRIYA | 05/12/2026 |            | COURSE | Show as = Stroke course", None),
     ("  Wants a night:                   NADIA HUDA | 30/11/2026 |       | WANT NIGHT | MUST", None),
     ("  Day off:                         MICHAEL | 05/12/2026 |          | OFF | MUST", None),
@@ -234,12 +247,16 @@ HOW_TO = [
     ("  A specific shift:                MICHAEL | 03/12/2026 |          | FIXED SHIFT | Show as = MINOR OT", None),
     ("  Only certain shifts for a while: FARAH | 30/11/2026 | 13/12/2026 | ONLY SHIFT | Show as = MSW LD", None),
     ("  No off day that week:            NADIA HUDA | 07/12/2026 | 13/12/2026 | OFF COUNT | Show as = 0", None),
+    ("  Owed off (shown as OFF (owe)):   NADIA HUDA | 15/12/2026 |       | OFF | Show as = OFF (owe)", None),
+    ("  In a set pool for a week:        AISYAH | 14/12/2026 | 20/12/2026 | POOL | Show as = PJHUS", None),
+    ("  New HO stops tagging early:      FARAH | 10/12/2026 |            | OFF TAG", None),
     ("  MUST = always done unless impossible (then listed in red). PREFER = done if it fits.", None),
     ("  PN after a night is automatic - no need to write PN. Old rows can stay.", None),
     ("", None),
     ("EXAMPLES - PAIRS", "head"),
     ("  Junior always with a named senior on night:  DANIEL | AISYAH, MICHAEL | ETD ON, EMOT PM | MUST", None),
     ("  Two friends want nights together:            NADIA HUDA | JASON | MSW ON | PREFER", None),
+    ("  Similar off / night days as others:          AISYAH | DANIEL, MICHAEL | SAME | PREFER", None),
     ("  (Juniors already always get a senior on night - PAIRS is only for extra, specific pairings.)", None),
 ]
 
@@ -267,7 +284,7 @@ def create_data_workbook(path, latest_week):
                 continue
             f = src.cell(d.row, 2).fill
             colour = f.fgColor.rgb if f is not None and f.fill_type == "solid" and f.fgColor.type == "rgb" else None
-            no_night = d.key in NO_NIGHT_DEFAULT or not pool
+            no_night = d.key in NO_NIGHT_DEFAULT      # subspecialty HOs: the unit itself stops nights
             ws.append([d.name.strip(), p, "NO" if no_night else "YES",
                        0 if no_night else None, 0 if no_night else None, None,
                        "YES" if colour in JUNIOR_COLOURS else "NO", "YES", None, None, "YES", None])
@@ -381,7 +398,7 @@ def read_data_workbook(path):
         if typ not in REQUEST_TYPES:
             problems.append(f"REQUESTS row {r}: unknown Type '{v.get('type')}' - skipped.")
             continue
-        must = norm_code(v.get("must")) != "PREFER" or typ in ("AL", "MC", "EL", "PH", "COURSE", "ONLY SHIFT", "OFF COUNT")
+        must = norm_code(v.get("must")) != "PREFER" or typ in ("AL", "MC", "EL", "PH", "COURSE", "ONLY SHIFT", "OFF COUNT", "POOL", "OFF TAG")
         requests.append(Request(row=r, name=str(v["name"]).strip(), start=start, end=end, type=typ,
                                 show_as=str(v.get("show") or "").strip(), must=must, notes=str(v.get("notes") or "")))
 
